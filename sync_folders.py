@@ -1,6 +1,6 @@
 """
     A module to synchronize folders and their subfolders/files aswell.
-    This module uses the os, pathlib, shutil, time and the multiprocessing module.
+    This module uses the os, pathlib, shutil, time, sys, platform and the multiprocessing module.
 """
 
 # Mandatory parameters to use this module:
@@ -12,6 +12,8 @@ import multiprocessing as mp
 from pathlib import Path
 import shutil
 import time
+from sys import argv
+from platform import system
 
 
 class SyncFolders:
@@ -459,3 +461,22 @@ class SyncFolders:
                 consumer.kill()
                 quit("Program finished")
                 
+                
+                
+if __name__ == '__main__':
+    if len(argv) < 3:
+        quit("Not enough arguments!")
+    
+    OS = system()
+    if OS == "Windows":
+        seperator = "\\"
+    elif OS == "Linux" or OS == "Darwin":
+        seperator = "/"
+    else:
+        quit("Not supported Operating System!")
+    
+    if argv[1][-1] != seperator:
+        argv[1] += seperator
+        
+        
+    SyncFolders(argv[1], int(argv[2]))
