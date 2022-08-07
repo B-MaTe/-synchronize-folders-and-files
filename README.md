@@ -2,6 +2,14 @@
 
 Python package to synchronize folders and files
 
+# How it works
+
+Inside the given directory, modification of any folder / file will apply to every other folder / file if they have the same foldername / filename.
+Available modifications:
+ * add folder / file
+ * remove folder / file
+ * rename folder / file
+
 # Usage
 
 - git clone https://github.com/B-MaTe/greehill_python_assigment.git
