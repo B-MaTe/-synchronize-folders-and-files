@@ -1,14 +1,18 @@
 """
     A module to synchronize folders and their subfolders/files aswell.
-    This module uses the os module and the multiprocessing module.
+    This module uses the os, pathlib and the multiprocessing module.
 """
 
 # Mandatory parameters to use this module:
 # source_path (string) : path of the source folder
 # MAX_CHANGES (consant integer) : maximum number of changes (add/remove/modify) 
 
+from multiprocessing.dummy import active_children
 import os
 import multiprocessing as mp
+from pathlib import Path
+import shutil
+import time
 
 
 class SyncFolders:
@@ -20,7 +24,7 @@ class SyncFolders:
         
         
         #### ---------- ####
-        self.buffer = mp.Queue(maxsize=self.MAX_CHANGES)
+        self.buffer = mp.Queue()
         # buffer that keeps track of changes, temporary stores the changes
         # the queue contains lists
         # the lists will contain the type of change (add/remove/modify),
@@ -52,6 +56,14 @@ class SyncFolders:
         self.folder_information = {}
         #### ---------- ####
         
+        # boolean for the two processes
+        self.finished_changing = mp.Event()
+        
+        # set it to True
+        self.finished_changing.set()
+        
+        # flag for exiting the process
+        self.exit_process = mp.Event()
     
         #### ---------- ####
         
@@ -62,6 +74,8 @@ class SyncFolders:
         
         
         #### ---------- ####
+        
+        
         
         # start the main loop
         self.main()
@@ -110,7 +124,113 @@ class SyncFolders:
     def setFolder_information(self, folder_information):
         self.folder_information = folder_information
         
+        
+    def clearFolderFileInformation(self):
+        self.folder_information.clear()
+        self.file_information.clear()
+        
+        
+    def getAndRemoveFromBuffer(self):
+        return self.buffer.get()
     
+    
+    def getFinished_changing(self):
+        return self.finished_changing.is_set()
+    
+    
+    def setFinished_changing(self, boolean):
+        if boolean == True:
+            self.finished_changing.set()
+        else:
+            self.finished_changing.clear()
+        
+    
+    def getExit_process(self):
+        return self.exit_process.is_set()
+    
+    
+    def setExit_process(self, boolean):
+        if boolean == True:
+            self.exit_process.set()
+        else:
+            self.exit_process.clear()
+    
+    # init the recursive methods for adding / modifying / deleting files / folders
+    # file addition
+    def add_file(self, source, file_path, filename):
+        # recursively go through every folder and check if filename exists,
+        # if not, copy the recently added file to the folder
+        for item in os.listdir(source):
+            if os.path.isdir(source + item):
+                self.add_file(source + item + "\\", file_path, filename)
+        path = os.path.join(source, filename)
+        if not os.path.exists(path):
+            shutil.copyfile(file_path, path)
+    # file modification
+    def modify_file(self, source, new_file, old_file):
+        # recursively go through every folder and check if old_file exists,
+        # if yes, then rename it to new_file name
+        for item in os.listdir(source):
+            if os.path.isdir(source + item):
+                self.modify_file(source + item + "\\", new_file, old_file)
+        oldPath = os.path.join(source, old_file)
+        if os.path.exists(oldPath):
+            os.rename(oldPath, os.path.join(source, new_file))
+    # file deletion
+    def delete_file(self, source, filename):
+        # recursively go through every folder and check if filename exists,
+        # if yes, remove it
+        for item in os.listdir(source):
+            if os.path.isdir(source + item):
+                self.delete_file(source + item + "\\", filename)
+        path = os.path.join(source, filename)
+        if os.path.exists(path):
+            os.remove(path)
+        
+        
+    # folder addition
+    def add_folder(self, source, foldername):
+        # recursively go through every folder and check if foldername exists,
+        # if not, create it
+        for item in os.listdir(source):
+            if os.path.isdir(source + item):
+                self.add_folder(source + item + "\\", foldername)
+        if not os.path.exists(source + foldername):
+            path = os.path.join(source, foldername)
+            os.mkdir(path)
+            
+            
+    # folder modification
+    def modify_folder(self, source, new_folder, old_folder):
+        # recursively go through every folder and check if old_folder exists,
+        # if yes, rename it to new_folder name
+        for item in os.listdir(source):
+            if os.path.isdir(source + item):
+                self.modify_folder(source + item + "\\", new_folder, old_folder)
+        if os.path.exists(os.path.join(source, old_folder)):
+            os.rename(os.path.join(source, old_folder) + "\\", os.path.join(source, new_folder) + "\\")
+            
+            
+    # folder deletion
+    def delete_folder(self, source, foldername):
+        # recursively go through every folder and check if foldername exists,
+        # if yes, remove it
+        # if the folder is not empty, use shutil to remove the tree
+        for item in os.listdir(source):
+            if os.path.isdir(source + item):
+                self.delete_folder(source + item + "\\", foldername)
+        path = os.path.join(source, foldername)
+        if os.path.exists(path):
+            # check if folder empty
+            if len(os.listdir(path)) > 0:
+                # use shutil to remove the directory and its belongings
+                shutil.rmtree(path)
+            else:
+                os.rmdir(path)
+    
+            
+
+
     def init_folder_file_information(self, source_path):
         # recursive method, maps the folders and files
         
@@ -138,156 +258,181 @@ class SyncFolders:
         while True:
             # quit if changes_made equals MAX_CHANGES
             if self.getChanges_made() >= self.MAX_CHANGES:
-                quit(f"The program finished with {self.changes_made} changes.")
+                self.setExit_process(True)
                 
             # continue if nothing is in the buffer
-            if not self.getBuffer().empty():
+            if self.getBuffer().empty():
                 continue
             
-            
-            # get and remove the last item from buffer
-            change = self.getBuffer().get()
-            # call the recursive method
-            self.make_changes(change)
+            # call the make_change method
+            self.make_changes()
             
             # increase changes_made
             self.increase_changes_made()
                 
     
-    def make_changes(self, change):
+    def make_changes(self):
         # change : list in the buffer
         # gets called by sync_folders method
-        print(change)
-        # todo: logic
-        pass
-    
-            
+        
+        # get and remove the last item from the queue
+        change = self.getAndRemoveFromBuffer()
+        
+        # check the last item and call the corresponding recursive method
+        
+        if change[-1] == 1:
+            # folders
+            if change[0] == 1:
+                # addition
+                self.add_folder(self.getSource_path(), change[1])
+            elif change[0] == 0:
+                # deletion
+                self.delete_folder(self.getSource_path(), change[1])
+            else:
+                # modification
+                self.modify_folder(self.getSource_path(), change[1], change[2])
+        else:
+            # files
+            if change[0] == 1:
+                # addition
+                self.add_file(self.getSource_path(), change[1], change[2])
+            elif change[0] == 0:
+                # deletion
+                self.delete_file(self.getSource_path(), change[1])
+            else:
+                # modification
+                self.modify_file(self.getSource_path(), change[1], change[2])
+                
+        self.setFinished_changing(True)
+        
     
     def check_for_changes(self):
         # Producer process that keeps checking for changes and adds them to the buffer
         
         # inner method for file and folder checking
-        def check():
+        def check(source_path):
+            
             # look for changes
             
-            # look for modifcation and deletion
-            for path, itemName in self.getFolder_information().items():
-                parentFolder = "\\".join(path.split("\\")[:-1])
-                if os.path.exists(parentFolder):
-                    # check if folder exists
-                    if os.path.exists(path):
-                        # check for files
-                        
-                        # check if file was modified or removed
-                        # loop through files by file_information
-                        
-                        for file_path, file_name in self.getFile_information().items():
-                            # if file doesn't exists, then it was removed or modified
-                            if not os.path.exists(file_path):
-                                # get the number of files in directory by file_information and os.listdir
-                                # if the two numbers equal, file has been modified, otherwise removed
-                                file_information_files = []
-                                for inner_file_path, inner_file_name in self.getFile_information().items():
-                                    if "\\".join(file_path.split("\\")[:-2]) == "\\".join(inner_file_path.split("\\")[:-2]):
-                                        file_information_files.append(inner_file_name)
-                                os_files = []
-                                for inner_os_file in os.listdir("\\".join(file_path.split("\\")[:-1])):
-                                    # check if file
-                                    if not os.path.isdir("\\".join(file_path.split("\\")[:-1]) + "\\" + inner_os_file):
-                                        os_files.append(inner_os_file)
-                                
-                                # modification
-                                if len(os_files) == len(file_information_files):
-                                    # get unique files from the two list
-                                    unique_files = list(set(file_information_files).symmetric_difference(set(os_files)))
-                                    # remove the new file
-                                    unique_files.remove(file_name)
-                                    
-                                    if len(unique_files) != 1:
-                                        quit("More than one files changed at a time!")
-                                    self.appendToBuffer([-1, file_name, unique_files[0], 0])
-                                    return
-                                # deletion
-                                elif len(os_files) + 1 == len(file_information_files):
-                                    self.appendToBuffer([0, file_name, 0])
-                                    return
-                                else:
-                                    quit("More than one files changed at a time!")
-                                
-                    # check for folders
-                    else:
-                        # folder removed or modified
-                        
-                        # get the number of items in directory by folder_information and os.listdir
-                        # if the number of items are the same, then the directory been modified, otherwise added or error
-                        same_path_counter = 0
-        
-                        for inner_path in list(self.getFolder_information().keys()) + list(self.getFile_information().keys()):
-                            if parentFolder == "\\".join(inner_path.split("\\")[:-1]):
-                                same_path_counter += 1
-                            
-                        if len(os.listdir(parentFolder)) == same_path_counter:
-                            # modified
-                            oldFolders = []
-                            for folder_path, oldfolder_name in self.getFolder_information().items():
-                                if parentFolder == "\\".join(folder_path.split("\\")[:-1]):
-                                    oldFolders.append(oldfolder_name)
-                            newFolders = []
-                            for newfolder_name in os.listdir(parentFolder):
-                                if os.path.isdir(parentFolder + "\\" + newfolder_name):
-                                    newFolders.append(newfolder_name)
-                            # get unique items from the two lists
-                            unique_folders = list(set(oldFolders).symmetric_difference(set(newFolders)))
-                            
-                            # remove the renamed folder, the only folder remaining is the old one
-                            unique_folders.remove(itemName)
-                            if len(unique_folders) != 1:
-                                quit("More than one folders changed at a time!")
-                            else:
-                                # todo: get the old name of modified folder
-                                self.appendToBuffer([-1, itemName, unique_folders[0], 1])
-                                return
-                        elif len(os.listdir(parentFolder)) == same_path_counter - 1:
-                            # deleted
-                            self.appendToBuffer([0, itemName, 1])
-                            return
-                        else:
-                            # error, multiple operation at the same time
-                            quit("More than one folders changed at a time!")
-                
+            # loop through the folders by os.listdir and compare the items with the ones in folder_information, file_information
+            os_files = []
+            os_folders = []
             
-            # inner recursive method to check if every file in source_path has a pair
-            # if not, then that file / folder was added
-            def check_for_addition(source_path):
-                # recursive method
-                for item in os.listdir(source_path):
-                    if os.path.isdir(source_path + item):
+            if os.path.exists(source_path):
+                for os_item in os.listdir(source_path):
+                    if os.path.isdir(os.path.join(source_path, os_item)):
                         # folder
-                        # check if folder exists in getFolder_information
-                        if source_path + item not in self.getFolder_information().keys():
-                            self.appendToBuffer([1, item, 1])
-                            return
-                        # call method for folder
-                        check_for_addition(source_path + item + "\\")
+                        os_folders.append(os_item)
                     else:
                         # file
-                        # check if file exists in getFile_information
-                        if source_path + item not in self.getFile_information().keys():
-                            self.appendToBuffer([1, item, 0])
-                            return
+                        os_files.append(os_item)
                         
-            # look for addition
-            check_for_addition(self.getSource_path())
+                # files
+                # loop through file_information
+                # get the files with the path source_path
+                information_files = []
+                for information_file_path, information_file in self.getFile_information().items():
+                    information_file_path = Path(information_file_path)
+                    if Path(source_path) == information_file_path.parent.absolute():
+                        information_files.append(information_file)
+                        
+                # folders
+                # loop through folder_information
+                # get the  folders with the path source_path
+                information_folders = []
+                for information_folder_path, information_folder in self.getFolder_information().items():
+                    information_folder_path = Path(information_folder_path)
+                    if Path(source_path) == information_folder_path.parent.absolute():
+                        information_folders.append(information_folder)
+            
+            
+                # folder checking
+                info_folders_len = len(information_folders)
+                os_folders_len = len(os_folders)
+                # deleted or added folder if the length of the two lists are not the same
+                if info_folders_len != os_folders_len:
+                    # get the unique elements from the two list
+                    unique = list(set(information_folders).symmetric_difference(set(os_folders)))
+                    if len(unique) != 1:
+                        self.setExit_process(True)
+                    if info_folders_len > os_folders_len:
+                        # deleted folder
+                        self.appendToBuffer([0, unique[0], 1])
+                        return True
+                    else:
+                        # added folder
+                        self.appendToBuffer([1, unique[0], 1])
+                        return True
+                        
+                # modification of folder
+                elif information_folders != os_folders:
+                    unique = list(set(information_folders).symmetric_difference(set(os_folders)))
+                    if len(unique) != 2:
+                        self.setExit_process(True)
+                    if unique[0] in os_folders:
+                        new_folder_name = unique[0]
+                        old_folder_name = unique[1]
+                    else:
+                        new_folder_name = unique[1]
+                        old_folder_name = unique[0]
+                    self.appendToBuffer([-1, new_folder_name, old_folder_name, 1])
+                    return True
+                    
                 
-            
-            
+                # file checking
+                
+                info_files_len = len(information_files)
+                os_files_len = len(os_files)
+                # deleted or added file
+                if info_files_len != os_files_len:
+                    unique = list(set(information_files).symmetric_difference(set(os_files)))
+                    if len(unique) != 1:
+                        self.setExit_process(True)
+                    if info_files_len > os_files_len:
+                        # deleted file
+                        self.appendToBuffer([0, unique[0], 0])
+                        return True
+                    else:
+                        # added file
+                        self.appendToBuffer([1, os.path.join(source_path, unique[0]), unique[0], 0])
+                        return True
+                        
+                # modification of file
+                elif information_files != os_files:
+                    unique = list(set(information_files).symmetric_difference(set(os_files)))
+                    if len(unique) != 2:
+                        self.setExit_process(True)
+                    if unique[0] in os_files:
+                        new_file_name = unique[0]
+                        old_file_name = unique[1]
+                    else:
+                        new_file_name = unique[1]
+                        old_file_name = unique[0]
+                    self.appendToBuffer([-1, new_file_name, old_file_name, 0])
+                    return True
+                    
+                for folder in os_folders:
+                    # call the method again with the found folders path
+                        if check(os.path.join(source_path, folder)):
+                            return True
+                
         while True:
             # check for change if make_changes method is not executing
-            if self.buffer.empty():
+            if self.getBuffer().empty() and self.getFinished_changing():
                 # call the check method
-                check()
-            
-       
+                if check(self.getSource_path()):
+                    self.setFinished_changing(False)
+                    while not self.getFinished_changing():
+                        time.sleep(1)
+                    # init the folder_inforamtion and file_information dictionaries again
+                    # clear them
+                    
+                    self.clearFolderFileInformation()
+                    self.init_folder_file_information(self.source_path)
+                    
+                    
+                
+        
     def main(self):
         # init the two processes
         producer = mp.Process(target=self.check_for_changes)
@@ -298,10 +443,11 @@ class SyncFolders:
         consumer.start()
         
         
-        #consumer.join()
-    
-        #producer.join()
-    
-        
-
-
+        while True:
+            print(self.getExit_process())
+            time.sleep(1)
+            if self.getExit_process():
+                producer.kill()
+                consumer.kill()
+                quit("Program finished")
+                
