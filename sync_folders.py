@@ -170,6 +170,8 @@ class SyncFolders:
         path = os.path.join(source, filename)
         if not os.path.exists(path):
             shutil.copyfile(file_path, path)
+            
+            
     # file modification
     def modify_file(self, source, new_file, old_file):
         # recursively go through every folder and check if old_file exists,
@@ -180,6 +182,8 @@ class SyncFolders:
         oldPath = os.path.join(source, old_file)
         if os.path.exists(oldPath):
             os.rename(oldPath, os.path.join(source, new_file))
+            
+            
     # file deletion
     def delete_file(self, source, filename):
         # recursively go through every folder and check if filename exists,
@@ -233,8 +237,6 @@ class SyncFolders:
                 os.rmdir(path)
     
             
-
-
     def init_folder_file_information(self, source_path):
         # recursive method, maps the folders and files
         
@@ -255,7 +257,6 @@ class SyncFolders:
                 tempFileInfo[source_path + item] = item
                 self.setFile_information(tempFileInfo)
                 
-    
     
     def sync_folders(self):
         # Consumer process that reads the changes from the buffer
@@ -314,6 +315,7 @@ class SyncFolders:
     
     def check_for_changes(self):
         # Producer process that keeps checking for changes and adds them to the buffer
+        
         
         # inner method for file and folder checking
         def check(source_path):
@@ -442,8 +444,6 @@ class SyncFolders:
                     self.init_folder_file_information(self.source_path)
                     
                     
-                
-        
     def main(self):
         # init the two processes
         producer = mp.Process(target=self.check_for_changes)
@@ -461,8 +461,7 @@ class SyncFolders:
                 consumer.kill()
                 quit("Program finished")
                 
-                
-                
+                  
 if __name__ == '__main__':
     if len(argv) < 3:
         quit("Not enough arguments!")
