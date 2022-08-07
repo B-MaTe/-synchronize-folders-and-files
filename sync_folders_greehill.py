@@ -1,13 +1,12 @@
 """
     A module to synchronize folders and their subfolders/files aswell.
-    This module uses the os, pathlib and the multiprocessing module.
+    This module uses the os, pathlib, shutil, time and the multiprocessing module.
 """
 
 # Mandatory parameters to use this module:
 # source_path (string) : path of the source folder
 # MAX_CHANGES (consant integer) : maximum number of changes (add/remove/modify) 
 
-from multiprocessing.dummy import active_children
 import os
 import multiprocessing as mp
 from pathlib import Path
@@ -18,9 +17,13 @@ import time
 class SyncFolders:
     
     def __init__(self, source_path, MAX_CHANGES):
+        
+        #### ---------- ####
         self.source_path = source_path
         self.MAX_CHANGES = MAX_CHANGES
         self.changes_made = 0
+        #### ---------- ####
+        
         
         
         #### ---------- ####
@@ -56,6 +59,8 @@ class SyncFolders:
         self.folder_information = {}
         #### ---------- ####
         
+        
+        #### ---------- ####
         # boolean for the two processes
         self.finished_changing = mp.Event()
         
@@ -64,22 +69,19 @@ class SyncFolders:
         
         # flag for exiting the process
         self.exit_process = mp.Event()
+        #### ---------- ####
+    
     
         #### ---------- ####
-        
         # initalize folder and file information based on source path
         self.init_folder_file_information(self.source_path)
-        
-        #### ---------- ####
-        
-        
         #### ---------- ####
         
         
         
+        #### ---------- ####
         # start the main loop
         self.main()
-        
         #### ---------- ####
         
     def getSource_path(self):
@@ -106,7 +108,7 @@ class SyncFolders:
         if type(l) == list:
             self.buffer.put(l)
         else:
-            quit("Error adding to Buffer!")
+            self.setExit_process(True)
     
     
     def getFile_information(self):
@@ -302,7 +304,9 @@ class SyncFolders:
             else:
                 # modification
                 self.modify_file(self.getSource_path(), change[1], change[2])
-                
+        
+        
+        # finished the change
         self.setFinished_changing(True)
         
     
@@ -366,6 +370,7 @@ class SyncFolders:
                         
                 # modification of folder
                 elif information_folders != os_folders:
+                    # get the unique elements from the two list
                     unique = list(set(information_folders).symmetric_difference(set(os_folders)))
                     if len(unique) != 2:
                         self.setExit_process(True)
@@ -383,8 +388,9 @@ class SyncFolders:
                 
                 info_files_len = len(information_files)
                 os_files_len = len(os_files)
-                # deleted or added file
+                # deleted or added file if the length of the two lists are not the same
                 if info_files_len != os_files_len:
+                    # get the unique elements from the two list
                     unique = list(set(information_files).symmetric_difference(set(os_files)))
                     if len(unique) != 1:
                         self.setExit_process(True)
@@ -399,6 +405,7 @@ class SyncFolders:
                         
                 # modification of file
                 elif information_files != os_files:
+                    # get the unique elements from the two list
                     unique = list(set(information_files).symmetric_difference(set(os_files)))
                     if len(unique) != 2:
                         self.setExit_process(True)
@@ -423,11 +430,13 @@ class SyncFolders:
                 if check(self.getSource_path()):
                     self.setFinished_changing(False)
                     while not self.getFinished_changing():
+                        # wait until the other process finished changing
                         time.sleep(1)
-                    # init the folder_inforamtion and file_information dictionaries again
-                    # clear them
                     
+                    # clear thefolder_inforamtion and file_information dictionaries
                     self.clearFolderFileInformation()
+                    
+                    # init the folder_inforamtion and file_information dictionaries again
                     self.init_folder_file_information(self.source_path)
                     
                     
@@ -438,15 +447,14 @@ class SyncFolders:
         producer = mp.Process(target=self.check_for_changes)
         consumer = mp.Process(target=self.sync_folders)
         
-        # start them and join them
+        # start them
         producer.start()
         consumer.start()
         
         
         while True:
-            print(self.getExit_process())
-            time.sleep(1)
             if self.getExit_process():
+                # if exit triggers, stop the processes and exit from the program
                 producer.kill()
                 consumer.kill()
                 quit("Program finished")
