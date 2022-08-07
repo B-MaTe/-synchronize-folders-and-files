@@ -18,12 +18,15 @@ from platform import system
 
 class SyncFolders:
     
-    def __init__(self, source_path, MAX_CHANGES):
+    def __init__(self, source_path, MAX_CHANGES, seperator):
         
         #### ---------- ####
         self.source_path = source_path
         self.MAX_CHANGES = MAX_CHANGES
         self.changes_made = 0
+        self.seperator = seperator
+        self.modification_counter = 1
+        self.overall_modifications = mp.Value('i', 0)
         #### ---------- ####
         
         
@@ -86,6 +89,7 @@ class SyncFolders:
         self.main()
         #### ---------- ####
         
+    
     def getSource_path(self):
         return self.source_path
     
@@ -98,6 +102,26 @@ class SyncFolders:
         return self.changes_made
     
     
+    def getSeperator(self):
+        return self.seperator
+    
+    
+    def getModification_counter(self):
+        return self.modification_counter
+    
+    
+    def setModification_counter(self, number):
+        self.modification_counter = number
+        
+        
+    def getOverall_modifications(self):
+        return self.overall_modifications.value
+    
+    
+    def setOverall_modifications(self, number):
+        self.overall_modifications.value = number
+        
+        
     def increase_changes_made(self):
         self.changes_made += 1
         
@@ -166,10 +190,13 @@ class SyncFolders:
         # if not, copy the recently added file to the folder
         for item in os.listdir(source):
             if os.path.isdir(source + item):
-                self.add_file(source + item + "\\", file_path, filename)
+                self.add_file(source + item + self.getSeperator(), file_path, filename)
         path = os.path.join(source, filename)
         if not os.path.exists(path):
             shutil.copyfile(file_path, path)
+            
+            # increase the modification counter
+            self.setModification_counter(self.getModification_counter() + 1)
             
             
     # file modification
@@ -178,10 +205,13 @@ class SyncFolders:
         # if yes, then rename it to new_file name
         for item in os.listdir(source):
             if os.path.isdir(source + item):
-                self.modify_file(source + item + "\\", new_file, old_file)
+                self.modify_file(source + item + self.getSeperator(), new_file, old_file)
         oldPath = os.path.join(source, old_file)
         if os.path.exists(oldPath):
             os.rename(oldPath, os.path.join(source, new_file))
+            
+            # increase the modification counter
+            self.setModification_counter(self.getModification_counter() + 1)
             
             
     # file deletion
@@ -190,10 +220,13 @@ class SyncFolders:
         # if yes, remove it
         for item in os.listdir(source):
             if os.path.isdir(source + item):
-                self.delete_file(source + item + "\\", filename)
+                self.delete_file(source + item + self.getSeperator(), filename)
         path = os.path.join(source, filename)
         if os.path.exists(path):
             os.remove(path)
+            
+            # increase the modification counter
+            self.setModification_counter(self.getModification_counter() + 1)
         
         
     # folder addition
@@ -202,10 +235,13 @@ class SyncFolders:
         # if not, create it
         for item in os.listdir(source):
             if os.path.isdir(source + item):
-                self.add_folder(source + item + "\\", foldername)
+                self.add_folder(source + item + self.getSeperator(), foldername)
         if not os.path.exists(source + foldername):
             path = os.path.join(source, foldername)
             os.mkdir(path)
+            
+            # increase the modification counter
+            self.setModification_counter(self.getModification_counter() + 1)
             
             
     # folder modification
@@ -214,9 +250,12 @@ class SyncFolders:
         # if yes, rename it to new_folder name
         for item in os.listdir(source):
             if os.path.isdir(source + item):
-                self.modify_folder(source + item + "\\", new_folder, old_folder)
+                self.modify_folder(source + item + self.getSeperator(), new_folder, old_folder)
         if os.path.exists(os.path.join(source, old_folder)):
-            os.rename(os.path.join(source, old_folder) + "\\", os.path.join(source, new_folder) + "\\")
+            os.rename(os.path.join(source, old_folder) + self.getSeperator(), os.path.join(source, new_folder) + self.getSeperator())
+            
+            # increase the modification counter
+            self.setModification_counter(self.getModification_counter() + 1)
             
             
     # folder deletion
@@ -226,15 +265,32 @@ class SyncFolders:
         # if the folder is not empty, use shutil to remove the tree
         for item in os.listdir(source):
             if os.path.isdir(source + item):
-                self.delete_folder(source + item + "\\", foldername)
+                self.delete_folder(source + item + self.getSeperator(), foldername)
         path = os.path.join(source, foldername)
         if os.path.exists(path):
             # check if folder empty
             if len(os.listdir(path)) > 0:
                 # use shutil to remove the directory and its belongings
                 shutil.rmtree(path)
+                
+                # count the number of items removed and increase the modification counter
+                self.setModification_counter(self.getModification_counter() + self.get_number_of_removed_items(path, 0))
             else:
                 os.rmdir(path)
+                
+                # increase the modification counter
+                self.setModification_counter(self.getModification_counter() + 1)
+                
+                
+    def get_number_of_removed_items(self, source, counter):
+        # recursive method that counts the number of items inside a directory
+        for item in os.listdir(source + self.getSeperator()):
+            counter += 1
+            path = os.path.join(source, item)
+            if os.path.isdir(path):
+                counter += self.get_number_of_removed_items(path + self.getSeperator())
+            
+        return counter
     
             
     def init_folder_file_information(self, source_path):
@@ -250,7 +306,7 @@ class SyncFolders:
                 self.setFolder_information(tempFolderInfo)
                 
                 # call recursive function with new path
-                self.init_folder_file_information(source_path + item + "\\")
+                self.init_folder_file_information(source_path + item + self.getSeperator())
             else:
                 # handle self.file_information
                 tempFileInfo = self.getFile_information()
@@ -283,6 +339,9 @@ class SyncFolders:
         # get and remove the last item from the queue
         change = self.getAndRemoveFromBuffer()
         
+        
+        # reset modification_counter
+        self.setModification_counter(1)
         # check the last item and call the corresponding recursive method
         
         if change[-1] == 1:
@@ -290,24 +349,33 @@ class SyncFolders:
             if change[0] == 1:
                 # addition
                 self.add_folder(self.getSource_path(), change[1])
+                print(f"{self.getModification_counter()} folder is added.")
             elif change[0] == 0:
                 # deletion
                 self.delete_folder(self.getSource_path(), change[1])
+                print(f"{self.getModification_counter()} folder is removed.")
             else:
                 # modification
                 self.modify_folder(self.getSource_path(), change[1], change[2])
+                print(f"{self.getModification_counter()} folder is renamed.")
         else:
             # files
             if change[0] == 1:
                 # addition
                 self.add_file(self.getSource_path(), change[1], change[2])
+                print(f"{self.getModification_counter()} file is added.")
             elif change[0] == 0:
                 # deletion
                 self.delete_file(self.getSource_path(), change[1])
+                print(f"{self.getModification_counter()} file is removed.")
             else:
                 # modification
                 self.modify_file(self.getSource_path(), change[1], change[2])
+                print(f"{self.getModification_counter()} file is renamed.")
         
+        
+        # increase overall_modifications
+        self.setOverall_modifications(self.getOverall_modifications() + self.getModification_counter())
         
         # finished the change
         self.setFinished_changing(True)
@@ -459,7 +527,7 @@ class SyncFolders:
                 # if exit triggers, stop the processes and exit from the program
                 producer.kill()
                 consumer.kill()
-                quit("Program finished")
+                quit(f"Program finished with {self.getOverall_modifications()} modifications.")
                 
                   
 if __name__ == '__main__':
@@ -478,4 +546,4 @@ if __name__ == '__main__':
         argv[1] += seperator
         
         
-    SyncFolders(argv[1], int(argv[2]))
+    SyncFolders(argv[1], int(argv[2]), seperator)
