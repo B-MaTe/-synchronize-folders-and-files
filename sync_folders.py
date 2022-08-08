@@ -182,6 +182,17 @@ class SyncFolders:
             self.exit_process.set()
         else:
             self.exit_process.clear()
+            
+            
+    def get_number_of_items(self, source, counter):
+        # recursive method that counts the number of items inside a directory
+        for item in os.listdir(source):
+            counter += 1
+            path = os.path.join(source, item)
+            if os.path.isdir(path):
+                counter += self.get_number_of_items(path + self.getSeperator(), 1)
+        return counter
+    
     
     # init the recursive methods for adding / modifying / deleting files / folders
     # file addition
@@ -260,6 +271,7 @@ class SyncFolders:
             
     # folder deletion
     def delete_folder(self, source, foldername):
+        
         # recursively go through every folder and check if foldername exists,
         # if yes, remove it
         # if the folder is not empty, use shutil to remove the tree
@@ -270,28 +282,17 @@ class SyncFolders:
         if os.path.exists(path):
             # check if folder empty
             if len(os.listdir(path)) > 0:
+                # count the number of items removed and increase the modification counter
+                self.setModification_counter(self.getModification_counter() + self.get_number_of_items(path + self.getSeperator(), 1))
+                
                 # use shutil to remove the directory and its belongings
                 shutil.rmtree(path)
-                
-                # count the number of items removed and increase the modification counter
-                self.setModification_counter(self.getModification_counter() + self.get_number_of_removed_items(path, 0))
             else:
                 os.rmdir(path)
                 
                 # increase the modification counter
                 self.setModification_counter(self.getModification_counter() + 1)
                 
-                
-    def get_number_of_removed_items(self, source, counter):
-        # recursive method that counts the number of items inside a directory
-        for item in os.listdir(source + self.getSeperator()):
-            counter += 1
-            path = os.path.join(source, item)
-            if os.path.isdir(path):
-                counter += self.get_number_of_removed_items(path + self.getSeperator())
-            
-        return counter
-    
             
     def init_folder_file_information(self, source_path):
         # recursive method, maps the folders and files
@@ -353,7 +354,7 @@ class SyncFolders:
             elif change[0] == 0:
                 # deletion
                 self.delete_folder(self.getSource_path(), change[1])
-                print(f"{self.getModification_counter()} folder is removed.")
+                print(f"{self.getModification_counter()} item is removed.")
             else:
                 # modification
                 self.modify_folder(self.getSource_path(), change[1], change[2])
