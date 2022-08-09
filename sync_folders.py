@@ -599,6 +599,10 @@ class SyncFolders:
                     
                     
     def main(self):
+        print("Program has started!")
+        print(f"Add / Remove / Rename / Modify inside {self.getSource_path()[:-1]}")
+        
+        
         # init the two processes
         producer = mp.Process(target=self.check_for_changes)
         consumer = mp.Process(target=self.sync_folders)
