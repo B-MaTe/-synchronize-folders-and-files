@@ -6,9 +6,12 @@ Python package to synchronize folders and files
 
 Inside the given directory, modification of any folder / file will apply to every other folder / file if they have the same foldername / filename.
 Available modifications:
- * add folder / file
- * remove folder / file
- * rename folder / file
+ * add folders and additional content within
+ * add files
+ * remove folders and additional content within
+ * remove files
+ * rename folders / files
+ * modify files
 
 # Usage
 
@@ -16,9 +19,17 @@ Available modifications:
 - run the program with the following arguments:
   * path of source folder (string)
   * number of modifications allowed (int)
-  * Windows example in cmd: 
+  * Windows example in cmd:  
     **python sync_folders.py C:\Users\User\ExampleExperimentalFolder 5**
-- add / remove / rename any folder / file inside that directory
+- folders:
+  * add
+  * remove
+  * rename
+- files:
+  * add
+  * remove
+  * rename
+  * modify
 - the program will quit when the allowed number of modification is reached
 
 
