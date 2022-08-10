@@ -30,7 +30,8 @@ Available modifications:
   * remove
   * rename
   * modify
-- the program will quit when the allowed number of modification is reached
+- **you can add / remove / modify one item at a time!**
+- the program will quit when the allowed number of changes is reached, and prints out the number of modifications made
 
 
 # Creator
