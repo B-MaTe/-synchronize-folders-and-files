@@ -233,7 +233,7 @@ class SyncFolders:
                     try:
                         # for some reason, copy2 sometimes throws PermissionError...
                         # In my opinion the problem is that the program tries to copy the file as soon as it is created, and maybe
-                        # it copyes the file before its initalization...
+                        # it copies the file before its initalization
                         # I managed to fix it with this loop
                         shutil.copy2(file_path, source)
                         break
@@ -513,7 +513,7 @@ class SyncFolders:
                             self.appendToBuffer([1, unique[0], os.path.join(source_path, unique[0]) ,1])
                             return True
                             
-                    # modification of folder
+                    # folder renaming
                     elif information_folders != os_folders:
                         # get the unique elements from the two list
                         unique = list(set(information_folders).symmetric_difference(set(os_folders)))
