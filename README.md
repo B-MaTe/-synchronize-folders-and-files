@@ -15,7 +15,7 @@ Available modifications:
 
 # Usage
 
-- git clone https://github.com/B-MaTe/greehill_python_assigment.git
+- git clone https://github.com/B-MaTe/-synchronize-folders-and-files.git
 - run the program with the following arguments:
   * path of source folder (string)
   * number of modifications allowed (int)
