@@ -1,4 +1,4 @@
-# Greehill python assignment
+# Synchronize folders and files
 
 Python package to synchronize folders and files
 
